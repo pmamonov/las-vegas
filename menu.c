@@ -9,7 +9,7 @@ stMenuItem* processButton(stMenuItem* itm, unsigned char but){
 		case RIGHT: p=itm->right; break;
 	}
 	if (p){
-		if (itm->typ|(1<<but)) ((void (*)(void))p)();
+		if (itm->typ&(1<<but)) ((void (*)(void))p)();
 		else return p;
 	}
 	return itm;

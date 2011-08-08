@@ -1,5 +1,5 @@
 DEVICE  = atmega32
-F_CPU   = 2457600	# in Hz
+F_CPU   = 4000000 #2457600	# in Hz
 
 CC = avr-gcc
 CFLAGS = -Wall -Os -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -I.\
@@ -13,7 +13,8 @@ main.hex: main.elf
 	avr-size main.elf
 
 main.elf: $(OBJ)
-	$(CC) -o main.elf -Wl,-Map,main.map $(OBJ)
+#	$(CC) -o main.elf -Wl,-Map,main.map $(OBJ)
+	$(CC) -o main.elf -Wl,-Map,main.map,-u,vfprintf -lprintf_min $(OBJ)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
