@@ -1,17 +1,23 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "lcd.h"
 #include "menu.h"
+#include <alloca.h>
 
 volatile unsigned int tim;
 volatile unsigned char status;
+
+char sDisp[33]; // display buffer
 char sStatus[6];
 char sBanner[33];
 int x;
 
-ISR(TIMER1_OVF_vect){
-	TCNT1=64935; // 0xffff-1000_us/(8_clk/f_MHz);
+extern uint8_t __stack;
+
+ISR(TIMER1_OVF_vect) {
+	TCNT1=65035; // 0xffff-1000_us/(8_clk/f_MHz);
 //	tim ? tim-- : tim;
 	if (tim) tim--;
 }
@@ -35,17 +41,25 @@ void startstop(void){
 
 void nextch(void){
 	snprintf(sBanner, 33, "%x: %c", x, (char)x++);
+
 }
 void prevch(void){
 	snprintf(sBanner, 33, "%x: %c", x, (char)x--);
 }
+
 void main(void) {
-	char sDisp[33]; // display buffer
+
 	x=0; nextch();
+//  x=2048;
+//  void *ptr=alloca(1);
+//  while (!(ptr=malloc(x))) x--;
+//  free(ptr);
+  
+//  itoa(StackCount, sDisp, 10);
+
 
 	//menu
 	stMenuItem m00={NULL,NULL,NULL,NULL,0, sBanner}; m00.right=nextch; m00.typ|=1<<RIGHT;m00.left=prevch; m00.typ|=1<<LEFT;
-
 	stMenuItem m10={NULL,NULL,NULL,NULL,0,sStatus}; m10.up=&m00;m00.down=&m10;m10.down=startstop;m10.typ|=1<<DOWN;
 	stMenuItem m11={NULL,NULL,NULL,NULL,0,"SETUP"}; m11.left=&m10; m10.right=&m11; m11.up=&m00;
 	stMenuItem m12={NULL,NULL,NULL,NULL,0,"TIME"}; m12.left=&m11;m11.right=&m12; m12.right=&m10;m10.left=&m12; m12.up=&m10;
@@ -61,7 +75,10 @@ void main(void) {
 
 	//timer
 	TCCR1B|=2<<CS10;//clk/8
-//	TIMSK|=1<<TOIE1;
+	TIMSK|=1<<TOIE1;
+  
+/*  TCCR0|=4<<CS00;
+  TIMSK|=1<<TOIE0;*/
 	tim=0;
 
 	lcd_Init();
@@ -71,13 +88,13 @@ void main(void) {
   while (1){
 		kbd=PINB&0xf0;
 		if (~kbd&(kbd^kbd0) && !tim) {
-			tim=0;
+  		tim=250;
 			if (~kbd&0x10) but=LEFT;
 			if (~kbd&0x20) but=UP;
 			if (~kbd&0x80) but=RIGHT;
 			if (~kbd&0x40) but=DOWN;
 			p=processButton(p, but);
-//			snprintf(sBanner, 33, "%d", x++);
+//			snprintf(sBanner, 33, "%u", (unsigned int)(&__stack));
 			print_menu(sDisp, p);
 			lcd_Clear();
 	  	lcd_Print(sDisp);
@@ -85,4 +102,3 @@ void main(void) {
 		kbd0=kbd;
 	}
 }
-

@@ -13,8 +13,8 @@ main.hex: main.elf
 	avr-size main.elf
 
 main.elf: $(OBJ)
-#	$(CC) -o main.elf -Wl,-Map,main.map $(OBJ)
-	$(CC) -o main.elf -Wl,-Map,main.map,-u,vfprintf -lprintf_min $(OBJ)
+#	$(CC) $(CFLAGS) -o main.elf -Wl,-Map,main.map $(OBJ)
+	$(CC) $(CFLAGS) -o main.elf -Wl,-Map,main.map,-u,vfprintf -lprintf_min $(OBJ)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
