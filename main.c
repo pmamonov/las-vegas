@@ -99,7 +99,7 @@ void main(void) {
 	mSetDay=(stMenuItem){&mSetTime,&mSetDay1,NULL,&mSetMonth,0,&sDay[2]};
 	mSetMonth=(stMenuItem){&mSetTime,&mSetMonth1,&mSetDay,&mSetYear,0,&sMonth[2]};
 	mSetYear=(stMenuItem){&mSetTime,&mSetYear1,&mSetMonth,&mSetHour,0,&sYear[2]};
-	mSetHour=(stMenuItem){&mSetTime,&mSetHour1,&mSetDay,&mSetMin,0,&sHour[2]};
+	mSetHour=(stMenuItem){&mSetTime,&mSetHour1,&mSetYear,&mSetMin,0,&sHour[2]};
 	mSetMin=(stMenuItem){&mSetTime,&mSetMin1,&mSetHour,&mSetSec,0,&sMin[1]};
 	mSetSec=(stMenuItem){&mSetTime,&mSetSec1,&mSetMin,NULL,0,&sSec[1]};
 
