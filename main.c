@@ -7,7 +7,25 @@
 #include "menu.h"
 #include "time.h"
 
+#define NPWM 4
+
 extern uint8_t __stack;
+
+typedef struct _stStep{
+	void *next;
+	uint32_t duration;
+	uint8_t pwm_val[NPWM];
+} stStep;
+
+stStep newStep={NULL, 3600};
+stStep step0={NULL,0};
+
+// menu declaration
+stMenuItem mRoot, mSS, mSetProg, mSetTime,\
+		mSetYear, mSetMonth, mSetDay, mSetHour, mSetMin, mSetSec,\
+		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1,\
+		mNewStep, mNewStepT, mNewAdd, mSetVal1;
+
 
 time_t time;
 
@@ -15,16 +33,32 @@ volatile uint16_t status;
 #define RUN 0
 #define UPD_SCRN 1
 
-//general purpose timers timers
+//general purpose timers
 #define NTIMERS 8
 volatile uint16_t timer[NTIMERS];
 
-ISR(TIMER1_OVF_vect) {
+ISR(TIMER1_OVF_vect){
 	static int i;
-	TCNT1=61536; // overflow in 1 ms
+	TCNT1=49536; // overflow in 1 ms
 	for (i=0; i<NTIMERS; i++)	if (timer[i]) timer[i]--;
 //timer 0 is for time
 	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_SCRN;}
+}
+
+volatile uint8_t pwm_cnt;
+unsigned char pwm_val[NPWM];
+uint8_t *pwm_port[NPWM]={&PORTD, &PORTD, &PORTD, &PORTD};
+uint8_t *pwm_ddr[NPWM]={&DDRD,&DDRD,&DDRD,&DDRD};
+uint8_t pwm_bit[NPWM]={0, 1, 3, 5};
+
+ISR(TIMER0_OVF_vect){
+	TCNT0=156;
+	static unsigned char i;
+	pwm_cnt++;
+	for (i=0; i<NPWM; i++){
+		if (!pwm_cnt && pwm_val[i]) *pwm_port[i]|=1<<pwm_bit[i];
+		if (pwm_cnt == pwm_val[i]) *pwm_port[i]&=~(1<<pwm_bit[i]);
+	}
 }
 
 void print_menu(char *s, stMenuItem *p){
@@ -38,24 +72,47 @@ void print_menu(char *s, stMenuItem *p){
 	} while (_p && _p!=p);
 }
 
-void startstop(stMenuItem *p){
+stMenuItem *startstop(stMenuItem *p){
 	(status&(1<<RUN)) ? (status&=~(1<<RUN)) : (status|=1<<RUN);
 	if (status&(1<<RUN)) snprintf(p->text, 6, "%s", "STOP");
 	else snprintf(p->text, 6, "%s", "START");
+	return p;
 }
 
-void incsec(stMenuItem *p){	time++;}
-void decsec(stMenuItem *p){	time--;}
-void incmin(stMenuItem *p){	time+=60;}
-void decmin(stMenuItem *p){	time-=60;}
-void inchour(stMenuItem *p){	time+=3600;}
-void dechour(stMenuItem *p){	time-=3600;}
-void incday(stMenuItem *p){	time+=86400;}
-void decday(stMenuItem *p){	time-=86400;}
-void incmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon<12?d.mon+1:d.mon; date2stamp(&d, &time);}
-void decmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon>1?d.mon-1:d.mon; date2stamp(&d, &time);}
-void incyear(stMenuItem *p){struct tm d; stamp2date(time, &d); d.year+=1; date2stamp(&d, &time);}
-void decyear(stMenuItem *p){struct tm d; stamp2date(time, &d); d.year-=1; date2stamp(&d, &time);}
+stMenuItem *incsec(stMenuItem *p){	time++; return p;}
+stMenuItem *decsec(stMenuItem *p){	time--;return p;}
+stMenuItem *incmin(stMenuItem *p){	time+=60;return p;}
+stMenuItem *decmin(stMenuItem *p){	time-=60;return p;}
+stMenuItem *inchour(stMenuItem *p){	time+=3600;return p;}
+stMenuItem *dechour(stMenuItem *p){	time-=3600;return p;}
+stMenuItem *incday(stMenuItem *p){	time+=86400;return p;}
+stMenuItem *decday(stMenuItem *p){	time-=86400;return p;}
+stMenuItem *incmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon<12?d.mon+1:d.mon; date2stamp(&d, &time);return p;}
+stMenuItem *decmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon>1?d.mon-1:d.mon; date2stamp(&d, &time);return p;}
+stMenuItem *incyear(stMenuItem *p){struct tm d; stamp2date(time, &d); d.year+=1; date2stamp(&d, &time);return p;}
+stMenuItem *decyear(stMenuItem *p){struct tm d; stamp2date(time, &d); d.year-=1; date2stamp(&d, &time);return p;}
+
+stMenuItem *goSetVal1(stMenuItem *p){
+	mSetVal1.text = p->text-3;
+	return &mSetVal1;
+}
+
+stMenuItem *addStep(stMenuItem *p){
+	stStep *st=&step0;
+
+	while (st->next) st=st->next;
+	st->next=malloc(sizeof(stStep));
+	memcpy(st->next, &newStep, sizeof(stStep));
+	return p->up;
+}
+
+stMenuItem *incval(stMenuItem *p){
+	uint8_t i = *(uint8_t*)(p->text-1);
+	newStep.pwm_val[i]++;
+	snprintf(p->text, 7,"%2d:%02d%%", i, (int)100*newStep.pwm_val[i]/255);
+	return p;
+}
+stMenuItem *decval(stMenuItem *p){	return p;}
 
 /*
 void nextch(void){
@@ -67,6 +124,7 @@ void prevch(void){
 }*/
 
 void main(void) {
+	int i;
 	char sDisp[33]; // display buffer
 	char sBanner[33];
 	char sStatus[6];
@@ -80,20 +138,18 @@ void main(void) {
 
 	struct tm date;
 
+
 	time=0;
 //allocate timers
 	timer[0]=0;
 	timer[1]=0;//kbd processing delay
 
-	//menu
-	stMenuItem mRoot, mSS, mSetProg, mSetTime,\
-		mSetYear, mSetMonth, mSetDay, mSetHour, mSetMin, mSetSec,\ 
-		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1;
+	//menu setup
 
 	mRoot=(stMenuItem){NULL,&mSS,NULL,NULL,0, sBanner};
 
 	mSS=(stMenuItem){&mRoot,startstop,&mSetTime,&mSetProg,1<<DOWN,sStatus}; 
-	mSetProg=(stMenuItem){&mRoot,NULL,&mSS,&mSetTime,0,"SETUP"}; 
+	mSetProg=(stMenuItem){&mRoot,&mNewStep,&mSS,&mSetTime,0,"SETUP"}; 
 	mSetTime=(stMenuItem){&mRoot,&mSetDay,&mSetProg,&mSS,0,"TIME"};
 	
 	mSetDay=(stMenuItem){&mSetTime,&mSetDay1,NULL,&mSetMonth,0,&sDay[2]};
@@ -110,6 +166,28 @@ void main(void) {
 	mSetMonth1=(stMenuItem){&mSetMonth,NULL,decmon, incmon, (1<<LEFT)|(1<<RIGHT), sMonth};
 	mSetYear1=(stMenuItem){&mSetYear,NULL,decyear, incyear, (1<<LEFT)|(1<<RIGHT), sYear};
 
+	mNewStep=(stMenuItem){&mSetProg,&mNewStepT,NULL,NULL,0, "NEW"};
+	mNewStepT=(stMenuItem){&mNewStep,NULL,NULL,NULL,0, "T"};
+
+	stMenuItem *mSetVal, *mSetValLeft;
+
+	//add menus for pwm fill factor setup
+	mSetValLeft=&mNewStepT;
+	for (i=0; i<NPWM; i++){
+//		while (mSetValLeft->right) mSetValLeft=mSetValLeft->right;
+		mSetVal=malloc(sizeof(stMenuItem));
+		char* sVal=malloc(8);
+		*(uint8_t *)sVal=i;
+		snprintf(&sVal[1], 7,"%2d:%02d%%", i, (int)100*newStep.pwm_val[i]/255);
+		*mSetVal=(stMenuItem){&mNewStep,goSetVal1,mSetValLeft,NULL,1<<DOWN,&sVal[4]};
+		mSetValLeft->right=mSetVal;
+		mSetValLeft=mSetVal;
+	}
+	mSetVal->right=&mNewAdd;
+	mNewAdd=(stMenuItem){&mNewStep,addStep,mSetVal,NULL,1<<DOWN, "ADD"};
+	mSetVal1=(stMenuItem){&mNewStepT, NULL, decval, incval, (1<<LEFT)|(1<<RIGHT), NULL};
+
+
 	stMenuItem *p = &mRoot;
 
 	status=1; startstop(&mSS);
@@ -123,7 +201,15 @@ void main(void) {
 	TCCR1B|=1<<CS10;//clk
 	TIMSK|=1<<TOIE1;
 	TCNT1 = 0xffff;
-  
+
+	//  software pwm
+	TCCR0|=1<<CS00;
+	TIMSK|=1<<TOIE0;
+	for (i=0; i<NPWM; i++){
+		pwm_ddr[i] = 1<<pwm_bit[i];
+		pwm_val[i]=0x7f;
+	}
+
 	lcd_Init();
 
 	sei();

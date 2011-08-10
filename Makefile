@@ -1,5 +1,5 @@
 DEVICE  = atmega32
-F_CPU   = 4000000 #2457600	# in Hz
+F_CPU   = 12000000 #2457600	# in Hz
 
 CC = avr-gcc
 CFLAGS = -Wall -Os -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -I.\
@@ -24,3 +24,7 @@ clean:
 
 load:
 	sudo avrdude -P usb -c usbasp -p m32 -U flash:w:main.bin:r
+
+fuse:
+	sudo avrdude -P usb -c usbasp -p m32 -U lfuse:w:lfuse.bin:r -U hfuse:w:hfuse.bin:r
+
