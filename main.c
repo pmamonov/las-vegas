@@ -19,12 +19,13 @@ typedef struct _stStep{
 
 stStep newStep={NULL, 3600};
 stStep step0={NULL,0};
+char sStep[16];
 
 // menu declaration
 stMenuItem mRoot, mSS, mSetProg, mSetTime,\
 		mSetYear, mSetMonth, mSetDay, mSetHour, mSetMin, mSetSec,\
 		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1,\
-		mNewStep, mNewStepT, mNewAdd, mSetVal1;
+		mNewStep, mNewStepT, mNewAdd, mSetVal1, mShowStep;
 
 
 time_t time;
@@ -39,7 +40,7 @@ volatile uint16_t timer[NTIMERS];
 
 ISR(TIMER1_OVF_vect){
 	static int i;
-	TCNT1=49536; // overflow in 1 ms
+	TCNT1=53536; // overflow in 1 ms
 	for (i=0; i<NTIMERS; i++)	if (timer[i]) timer[i]--;
 //timer 0 is for time
 	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_SCRN;}
@@ -59,6 +60,18 @@ ISR(TIMER0_OVF_vect){
 		if (!pwm_cnt && pwm_val[i]) *pwm_port[i]|=1<<pwm_bit[i];
 		if (pwm_cnt == pwm_val[i]) *pwm_port[i]&=~(1<<pwm_bit[i]);
 	}
+}
+
+stMenuItem *goShowStep(stMenuItem *p){
+  uint8_t l=0, n=*(uint8_t*)(p->text-1), i=0;
+  stStep* s=&step0;
+  while (i<n && s->next) {s=s->next; i++;}
+  snprintf(sStep,sizeof(sStep),"%d:%d",i, s->duration); 
+  for (i=0; i<NPWM; i++){
+    l=strlen(sStep);
+    snprintf(&sStep[l],sizeof(sStep)-l," %d",s->pwm_val[i]);
+  }
+  return &mShowStep;
 }
 
 void print_menu(char *s, stMenuItem *p){
@@ -99,20 +112,38 @@ stMenuItem *goSetVal1(stMenuItem *p){
 
 stMenuItem *addStep(stMenuItem *p){
 	stStep *st=&step0;
+  stMenuItem *m;
+  char *s;
+  uint8_t ist=0;
 
-	while (st->next) st=st->next;
+	while (st->next) {st=st->next; ist++;}
+  ist++;
 	st->next=malloc(sizeof(stStep));
 	memcpy(st->next, &newStep, sizeof(stStep));
+
+  m=&mNewStep;
+  while (m->right) m=m->right;
+  m->right=malloc(sizeof(stMenuItem));
+  s=malloc(4);
+  snprintf(&s[1], 3, "%02d", ist);
+  *(uint8_t*)s=ist;
+  *(stMenuItem*)m->right=(stMenuItem){&mSetProg,goShowStep,m,NULL,1<<DOWN,&s[1]};
+
 	return p->up;
 }
 
 stMenuItem *incval(stMenuItem *p){
 	uint8_t i = *(uint8_t*)(p->text-1);
-	newStep.pwm_val[i]++;
-	snprintf(p->text, 7,"%2d:%02d%%", i, (int)100*newStep.pwm_val[i]/255);
+	snprintf(p->text, 7,"%2d:%03d", i, ++newStep.pwm_val[i]);
 	return p;
 }
-stMenuItem *decval(stMenuItem *p){	return p;}
+
+stMenuItem *decval(stMenuItem *p){
+	uint8_t i = *(uint8_t*)(p->text-1);
+	snprintf(p->text, 7,"%2d:%03d", i, --newStep.pwm_val[i]);
+	return p;
+}
+
 
 /*
 void nextch(void){
@@ -149,7 +180,7 @@ void main(void) {
 	mRoot=(stMenuItem){NULL,&mSS,NULL,NULL,0, sBanner};
 
 	mSS=(stMenuItem){&mRoot,startstop,&mSetTime,&mSetProg,1<<DOWN,sStatus}; 
-	mSetProg=(stMenuItem){&mRoot,&mNewStep,&mSS,&mSetTime,0,"SETUP"}; 
+	mSetProg=(stMenuItem){&mRoot,&mNewStep,&mSS,&mSetTime,0,"PROG"}; 
 	mSetTime=(stMenuItem){&mRoot,&mSetDay,&mSetProg,&mSS,0,"TIME"};
 	
 	mSetDay=(stMenuItem){&mSetTime,&mSetDay1,NULL,&mSetMonth,0,&sDay[2]};
@@ -178,7 +209,7 @@ void main(void) {
 		mSetVal=malloc(sizeof(stMenuItem));
 		char* sVal=malloc(8);
 		*(uint8_t *)sVal=i;
-		snprintf(&sVal[1], 7,"%2d:%02d%%", i, (int)100*newStep.pwm_val[i]/255);
+		snprintf(&sVal[1], 7,"%2d:%03d", i, newStep.pwm_val[i]);
 		*mSetVal=(stMenuItem){&mNewStep,goSetVal1,mSetValLeft,NULL,1<<DOWN,&sVal[4]};
 		mSetValLeft->right=mSetVal;
 		mSetValLeft=mSetVal;
@@ -186,7 +217,7 @@ void main(void) {
 	mSetVal->right=&mNewAdd;
 	mNewAdd=(stMenuItem){&mNewStep,addStep,mSetVal,NULL,1<<DOWN, "ADD"};
 	mSetVal1=(stMenuItem){&mNewStepT, NULL, decval, incval, (1<<LEFT)|(1<<RIGHT), NULL};
-
+  mShowStep=(stMenuItem){&mNewStep, NULL, NULL, NULL, 0, sStep};
 
 	stMenuItem *p = &mRoot;
 
