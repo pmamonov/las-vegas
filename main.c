@@ -13,29 +13,33 @@ extern uint8_t __stack;
 
 typedef struct _stStep{
 	void *next;
-	uint32_t duration;
+	time_t duration;
 	uint8_t pwm_val[NPWM];
 } stStep;
 
-stStep newStep={NULL, 3600};
+int curstep;
+
+stStep newStep={NULL, 3600UL};
 stStep step0={NULL,0};
-char sStep[16];
+char sStep[33];
 
 // menu declaration
-stMenuItem mRoot, mSS, mSetProg, mSetTime,\
+volatile stMenuItem mRoot, mSS, mSetProg, mSetTime,\
 		mSetYear, mSetMonth, mSetDay, mSetHour, mSetMin, mSetSec,\
 		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1,\
-		mNewStep, mNewStepT, mNewAdd, mSetVal1, mShowStep;
+		mNewStep, mNewStepT, mNewAdd, mSetVal1, mShowStep, 
+		mNewStepTday, mNewStepThour, mNewStepTmin, mNewStepTsec,\
+		mNewStepTday1, mNewStepThour1, mNewStepTmin1, mNewStepTsec1;
 
-
-time_t time;
+time_t time, start;
 
 volatile uint16_t status;
 #define RUN 0
 #define UPD_SCRN 1
+#define UPD_TIM 2
 
 //general purpose timers
-#define NTIMERS 8
+#define NTIMERS 4
 volatile uint16_t timer[NTIMERS];
 
 ISR(TIMER1_OVF_vect){
@@ -43,7 +47,7 @@ ISR(TIMER1_OVF_vect){
 	TCNT1=53536; // overflow in 1 ms
 	for (i=0; i<NTIMERS; i++)	if (timer[i]) timer[i]--;
 //timer 0 is for time
-	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_SCRN;}
+	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_TIM;}
 }
 
 volatile uint8_t pwm_cnt;
@@ -66,11 +70,12 @@ stMenuItem *goShowStep(stMenuItem *p){
   uint8_t l=0, n=*(uint8_t*)(p->text-1), i=0;
   stStep* s=&step0;
   while (i<n && s->next) {s=s->next; i++;}
-  snprintf(sStep,sizeof(sStep),"%d:%d",i, s->duration); 
+  snprintf(sStep,sizeof(sStep),"DEL? %d:%d",i, s->duration); 
   for (i=0; i<NPWM; i++){
     l=strlen(sStep);
     snprintf(&sStep[l],sizeof(sStep)-l," %d",s->pwm_val[i]);
   }
+	mShowStep.up=p;
   return &mShowStep;
 }
 
@@ -86,11 +91,42 @@ void print_menu(char *s, stMenuItem *p){
 }
 
 stMenuItem *startstop(stMenuItem *p){
+	int i;
 	(status&(1<<RUN)) ? (status&=~(1<<RUN)) : (status|=1<<RUN);
-	if (status&(1<<RUN)) snprintf(p->text, 6, "%s", "STOP");
-	else snprintf(p->text, 6, "%s", "START");
+	if (status&(1<<RUN)){ 
+		start=time;
+		curstep=0;
+		for (i=0; i<NPWM; i++) pwm_val[i] = 0;
+		TIMSK|=1<<TOIE0;
+		snprintf(p->text, 6, "%s", "STOP");
+	}
+	else{
+		snprintf(p->text, 6, "%s", "START");
+		TIMSK &= ~(1<<TOIE0);
+		for (i=0; i<NPWM; i++) *pwm_port[i] &= ~(1<<pwm_bit[i]);
+	}
 	return p;
 }
+
+char sStepDay[5], sStepHour[5], sStepMin[5], sStepSec[5];
+
+void updStTs(void){
+//	struct tm d;
+//	stamp2date(newStep.duration, &d);
+	snprintf(sStepDay, sizeof(sStepDay), "d:%02d",newStep.duration/86400UL);
+	snprintf(sStepHour, sizeof(sStepDay), "h:%02d",newStep.duration%86400UL/3600);
+	snprintf(sStepMin, sizeof(sStepDay), "m:%02d",newStep.duration%3600/60);
+	snprintf(sStepSec, sizeof(sStepDay), "s:%02d",newStep.duration%60);
+}
+
+stMenuItem *incStSec(stMenuItem *p){	newStep.duration++;  updStTs(); return p;}
+stMenuItem *decStSec(stMenuItem *p){	newStep.duration--; updStTs(); return p;}
+stMenuItem *incStMin(stMenuItem *p){	newStep.duration+=60; updStTs(); return p;}
+stMenuItem *decStMin(stMenuItem *p){	newStep.duration-=60; updStTs(); return p;}
+stMenuItem *incStHour(stMenuItem *p){	newStep.duration+=3600; updStTs(); return p;}
+stMenuItem *decStHour(stMenuItem *p){	newStep.duration-=3600; updStTs(); return p;}
+stMenuItem *incStDay(stMenuItem *p){	newStep.duration+=86400; updStTs(); return p;}
+stMenuItem *decStDay(stMenuItem *p){	newStep.duration-=86400; updStTs(); return p;}
 
 stMenuItem *incsec(stMenuItem *p){	time++; return p;}
 stMenuItem *decsec(stMenuItem *p){	time--;return p;}
@@ -115,12 +151,12 @@ stMenuItem *addStep(stMenuItem *p){
   stMenuItem *m;
   char *s;
   uint8_t ist=0;
-
+//add elem into sequence of steps
 	while (st->next) {st=st->next; ist++;}
   ist++;
 	st->next=malloc(sizeof(stStep));
 	memcpy(st->next, &newStep, sizeof(stStep));
-
+// add corresponding menu item
   m=&mNewStep;
   while (m->right) m=m->right;
   m->right=malloc(sizeof(stMenuItem));
@@ -130,6 +166,35 @@ stMenuItem *addStep(stMenuItem *p){
   *(stMenuItem*)m->right=(stMenuItem){&mSetProg,goShowStep,m,NULL,1<<DOWN,&s[1]};
 
 	return p->up;
+}
+
+stMenuItem *delStep(stMenuItem *p){
+	uint8_t n = *(uint8_t*)(((stMenuItem*)p->up)->text-1), i=0;
+	//del step from sequence
+	stStep *prev, *this;
+	this=&step0;
+  while (i<n-1 && this->next) {
+		this=this->next; 
+		i++;
+	}
+	prev=this;
+	this=this->next;
+	prev->next=this->next;
+	free(this);
+//delete menu item
+	stMenuItem *m=&mNewStep;
+	i=0;
+	m=((stMenuItem*)p->up)->right;
+	while (m) { // update labels and IDs in right part of menu sequence
+		snprintf(m->text, 3, "%02d", --*(uint8_t*)(m->text-1));
+		m=m->right;
+	}
+	m=p->up;
+	((stMenuItem*)m->left)->right=m->right; // adjust pointers in menu sequence
+	((stMenuItem*)m->right)->left=m->left;
+	free(m->text-1);//del string
+	free(m);
+	return &mNewStep;
 }
 
 stMenuItem *incval(stMenuItem *p){
@@ -168,6 +233,8 @@ void main(void) {
 	char sYear[7];
 
 	struct tm date;
+	time_t t;
+	stStep *s;
 
 
 	time=0;
@@ -198,7 +265,19 @@ void main(void) {
 	mSetYear1=(stMenuItem){&mSetYear,NULL,decyear, incyear, (1<<LEFT)|(1<<RIGHT), sYear};
 
 	mNewStep=(stMenuItem){&mSetProg,&mNewStepT,NULL,NULL,0, "NEW"};
-	mNewStepT=(stMenuItem){&mNewStep,NULL,NULL,NULL,0, "T"};
+	mNewStepT=(stMenuItem){&mNewStep,&mNewStepTday,NULL,NULL,0, "T"};
+
+	mNewStepTday	=(stMenuItem){&mNewStepT,&mNewStepTday1,NULL,&mNewStepThour,0, &sStepDay[2]};
+	mNewStepThour	=(stMenuItem){&mNewStepT,&mNewStepThour1,&mNewStepTday,&mNewStepTmin,0, &sStepHour[2]};
+	mNewStepTmin	=(stMenuItem){&mNewStepT,&mNewStepTmin1,&mNewStepThour,&mNewStepTsec,0, &sStepMin[1]};
+	mNewStepTsec	=(stMenuItem){&mNewStepT,&mNewStepTsec1,&mNewStepTmin,NULL,0, &sStepSec[1]};
+
+	mNewStepTday1	=(stMenuItem){&mNewStepTday,NULL,decStDay,incStDay,(1<<LEFT)|(1<<RIGHT), sStepDay};
+	mNewStepThour1=(stMenuItem){&mNewStepThour,NULL,decStHour,incStHour,(1<<LEFT)|(1<<RIGHT), sStepHour};
+	mNewStepTmin1	=(stMenuItem){&mNewStepTmin,NULL,decStMin,incStMin,(1<<LEFT)|(1<<RIGHT), sStepMin};
+	mNewStepTsec1	=(stMenuItem){&mNewStepTsec,NULL,decStSec,incStSec,(1<<LEFT)|(1<<RIGHT), sStepSec};
+
+	updStTs();
 
 	stMenuItem *mSetVal, *mSetValLeft;
 
@@ -217,7 +296,7 @@ void main(void) {
 	mSetVal->right=&mNewAdd;
 	mNewAdd=(stMenuItem){&mNewStep,addStep,mSetVal,NULL,1<<DOWN, "ADD"};
 	mSetVal1=(stMenuItem){&mNewStepT, NULL, decval, incval, (1<<LEFT)|(1<<RIGHT), NULL};
-  mShowStep=(stMenuItem){&mNewStep, NULL, NULL, NULL, 0, sStep};
+  mShowStep=(stMenuItem){&mNewStep, delStep, NULL, NULL, 1<<DOWN, sStep};
 
 	stMenuItem *p = &mRoot;
 
@@ -235,7 +314,7 @@ void main(void) {
 
 	//  software pwm
 	TCCR0|=1<<CS00;
-	TIMSK|=1<<TOIE0;
+//	TIMSK|=1<<TOIE0;
 	for (i=0; i<NPWM; i++){
 		pwm_ddr[i] = 1<<pwm_bit[i];
 		pwm_val[i]=0x7f;
@@ -248,7 +327,7 @@ void main(void) {
   while (1){
 		kbd=PINB&0xf0;
 		if ((kbd^kbd0) && !timer[1]) {
-  		timer[1]=250;
+  		timer[1]=100;
 			if (~kbd&(kbd^kbd0)){
 			if (~kbd&0x10) but=LEFT;
 			if (~kbd&0x20) but=UP;
@@ -259,6 +338,24 @@ void main(void) {
 			}
 		}
 		kbd0=kbd;
+		
+		if (status & (1<<UPD_TIM)){
+			status &= ~(1<<UPD_TIM);
+			if (p==&mRoot || p==&mSetTime || p->up==&mSetTime || ((stMenuItem*)p->up)->up==&mSetTime) status |= 1<<UPD_SCRN;
+			s=&step0;
+			t=start;
+			i=0;
+			while (i<curstep && s->next) {
+				s=s->next;
+				t+=s->duration;
+				i++;
+			}
+			if (time>=t){
+				if (s->next) {s=s->next; curstep++;}
+				else {start=t; s=&step0; curstep=0;}
+				for (i=0; i<NPWM; i++) pwm_val[i]=s->pwm_val[i];
+			}
+		}
 
 		if (status & (1<<UPD_SCRN)){
 			status &= ~(1<<UPD_SCRN);
@@ -270,8 +367,8 @@ void main(void) {
 			snprintf(sDay, 5, "D:%02d", date.day);
 			snprintf(sMonth, 5, "M:%02d", date.mon);
 			snprintf(sYear, 7, "Y:%4d", date.year);
-			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s",\
-				&sDay[2], &sMonth[2], &sYear[4], &sHour[2], &sMin[2]);
+			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s\n%02d",\
+				&sDay[2], &sMonth[2], &sYear[4], &sHour[2], &sMin[2], curstep);
 			print_menu(sDisp, p);
 			lcd_Clear();
 	  	lcd_Print(sDisp);
