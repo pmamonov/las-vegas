@@ -22,6 +22,7 @@ int curstep;
 stStep newStep={NULL, 3600UL};
 stStep step0={NULL,0};
 char sStep[33];
+char sStatus[17];
 
 // menu declaration
 volatile stMenuItem mRoot, mSS, mSetProg, mSetTime,\
@@ -102,6 +103,7 @@ stMenuItem *startstop(stMenuItem *p){
 	}
 	else{
 		snprintf(p->text, 6, "%s", "START");
+    snprintf(sStatus, sizeof(sStatus), "STOPPED");
 		TIMSK &= ~(1<<TOIE0);
 		for (i=0; i<NPWM; i++) *pwm_port[i] &= ~(1<<pwm_bit[i]);
 	}
@@ -223,7 +225,7 @@ void main(void) {
 	int i;
 	char sDisp[33]; // display buffer
 	char sBanner[33];
-	char sStatus[6];
+  char sSS[6];
 
 	char sSec[5];
 	char sMin[5];
@@ -246,7 +248,7 @@ void main(void) {
 
 	mRoot=(stMenuItem){NULL,&mSS,NULL,NULL,0, sBanner};
 
-	mSS=(stMenuItem){&mRoot,startstop,&mSetTime,&mSetProg,1<<DOWN,sStatus}; 
+	mSS=(stMenuItem){&mRoot,startstop,&mSetTime,&mSetProg,1<<DOWN,sSS}; 
 	mSetProg=(stMenuItem){&mRoot,&mNewStep,&mSS,&mSetTime,0,"PROG"}; 
 	mSetTime=(stMenuItem){&mRoot,&mSetDay,&mSetProg,&mSS,0,"TIME"};
 	
@@ -316,8 +318,8 @@ void main(void) {
 	TCCR0|=1<<CS00;
 //	TIMSK|=1<<TOIE0;
 	for (i=0; i<NPWM; i++){
-		pwm_ddr[i] = 1<<pwm_bit[i];
-		pwm_val[i]=0x7f;
+		*pwm_ddr[i] |= 1<<pwm_bit[i];
+		pwm_val[i]=0x0;
 	}
 
 	lcd_Init();
@@ -326,7 +328,7 @@ void main(void) {
 
   while (1){
 		kbd=PINB&0xf0;
-		if ((kbd^kbd0) && !timer[1]) {
+		if ((kbd^kbd0) && !timer[1]){
   		timer[1]=100;
 			if (~kbd&(kbd^kbd0)){
 			if (~kbd&0x10) but=LEFT;
@@ -342,6 +344,7 @@ void main(void) {
 		if (status & (1<<UPD_TIM)){
 			status &= ~(1<<UPD_TIM);
 			if (p==&mRoot || p==&mSetTime || p->up==&mSetTime || ((stMenuItem*)p->up)->up==&mSetTime) status |= 1<<UPD_SCRN;
+      if (status&(1<<RUN)){
 			s=&step0;
 			t=start;
 			i=0;
@@ -352,14 +355,20 @@ void main(void) {
 			}
 			if (time>=t){
 				if (s->next) {s=s->next; curstep++;}
-				else {start=t; s=&step0; curstep=0;}
+				else {
+          start=t;
+          s=step0.next ? step0.next : &step0; 
+          curstep=step0.next?1:0;
+        }
 				for (i=0; i<NPWM; i++) pwm_val[i]=s->pwm_val[i];
+        snprintf(sStatus, sizeof(sStatus), "RUNNING(%02d)", curstep);
 			}
+      }
 		}
 
 		if (status & (1<<UPD_SCRN)){
 			status &= ~(1<<UPD_SCRN);
-			//update time
+			//update banner
 			stamp2date(time, &date);
 			snprintf(sSec, 5, "s:%02d", date.sec);
 			snprintf(sMin, 5, "m:%02d", date.min);
@@ -367,8 +376,8 @@ void main(void) {
 			snprintf(sDay, 5, "D:%02d", date.day);
 			snprintf(sMonth, 5, "M:%02d", date.mon);
 			snprintf(sYear, 7, "Y:%4d", date.year);
-			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s\n%02d",\
-				&sDay[2], &sMonth[2], &sYear[4], &sHour[2], &sMin[2], curstep);
+			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s\n%s",\
+				&sDay[2], &sMonth[2], &sYear[4], &sHour[2], &sMin[2], sStatus);
 			print_menu(sDisp, p);
 			lcd_Clear();
 	  	lcd_Print(sDisp);
