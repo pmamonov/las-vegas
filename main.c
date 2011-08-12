@@ -23,6 +23,8 @@ stStep newStep={NULL, 3600UL};
 stStep step0={NULL,0};
 char sStep[33];
 char sStatus[17];
+char sMemFree[8];
+uint16_t *pmem;
 
 // menu declaration
 volatile stMenuItem mRoot, mSS, mSetProg, mSetTime,\
@@ -30,7 +32,7 @@ volatile stMenuItem mRoot, mSS, mSetProg, mSetTime,\
 		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1,\
 		mNewStep, mNewStepT, mNewAdd, mSetVal1, mShowStep, 
 		mNewStepTday, mNewStepThour, mNewStepTmin, mNewStepTsec,\
-		mNewStepTday1, mNewStepThour1, mNewStepTmin1, mNewStepTsec1;
+		mNewStepTday1, mNewStepThour1, mNewStepTmin1, mNewStepTsec1, mMemFree, mMemFree1;
 
 time_t time, start;
 
@@ -148,6 +150,16 @@ stMenuItem *goSetVal1(stMenuItem *p){
 	return &mSetVal1;
 }
 
+stMenuItem *goMemFree1(stMenuItem *p){
+	int sz=0;
+	int i=RAMEND/2;
+	for (; i; i--){
+		if (pmem[i]==0xbeef) sz++;
+	}
+	snprintf(sMemFree, sizeof(sMemFree), "%d", sz);
+	return &mMemFree1;
+}
+
 stMenuItem *addStep(stMenuItem *p){
 	stStep *st=&step0;
   stMenuItem *m;
@@ -157,12 +169,15 @@ stMenuItem *addStep(stMenuItem *p){
 	while (st->next) {st=st->next; ist++;}
   ist++;
 	st->next=malloc(sizeof(stStep));
+	if (!st->next) lcd_Print("OUT OF MEM");
 	memcpy(st->next, &newStep, sizeof(stStep));
 // add corresponding menu item
   m=&mNewStep;
   while (m->right) m=m->right;
   m->right=malloc(sizeof(stMenuItem));
+	if (!m->right) lcd_Print("OUT OF MEM");
   s=malloc(4);
+	if (!s) lcd_Print("OUT OF MEM");
   snprintf(&s[1], 3, "%02d", ist);
   *(uint8_t*)s=ist;
   *(stMenuItem*)m->right=(stMenuItem){&mSetProg,goShowStep,m,NULL,1<<DOWN,&s[1]};
@@ -193,7 +208,7 @@ stMenuItem *delStep(stMenuItem *p){
 	}
 	m=p->up;
 	((stMenuItem*)m->left)->right=m->right; // adjust pointers in menu sequence
-	((stMenuItem*)m->right)->left=m->left;
+	if (m->right) ((stMenuItem*)m->right)->left=m->left;
 	free(m->text-1);//del string
 	free(m);
 	return &mNewStep;
@@ -223,6 +238,7 @@ void prevch(void){
 
 void main(void) {
 	int i;
+
 	char sDisp[33]; // display buffer
 	char sBanner[33];
   char sSS[6];
@@ -237,7 +253,12 @@ void main(void) {
 	struct tm date;
 	time_t t;
 	stStep *s;
+	unsigned char kbd, kbd0, but;
 
+/*	pmem=0; i=200;
+	while (!pmem) pmem=malloc(2*i--);
+	for (;i;i--) pmem[i]=0xbeef;
+	free(pmem);*/
 
 	time=0;
 //allocate timers
@@ -246,7 +267,7 @@ void main(void) {
 
 	//menu setup
 
-	mRoot=(stMenuItem){NULL,&mSS,NULL,NULL,0, sBanner};
+	mRoot=(stMenuItem){NULL,&mSS,&mMemFree,NULL,0, sBanner};
 
 	mSS=(stMenuItem){&mRoot,startstop,&mSetTime,&mSetProg,1<<DOWN,sSS}; 
 	mSetProg=(stMenuItem){&mRoot,&mNewStep,&mSS,&mSetTime,0,"PROG"}; 
@@ -288,7 +309,9 @@ void main(void) {
 	for (i=0; i<NPWM; i++){
 //		while (mSetValLeft->right) mSetValLeft=mSetValLeft->right;
 		mSetVal=malloc(sizeof(stMenuItem));
+		if (!mSetVal) lcd_Print("OUT OF MEM");
 		char* sVal=malloc(8);
+		if (!sVal) lcd_Print("OUT OF MEM");
 		*(uint8_t *)sVal=i;
 		snprintf(&sVal[1], 7,"%2d:%03d", i, newStep.pwm_val[i]);
 		*mSetVal=(stMenuItem){&mNewStep,goSetVal1,mSetValLeft,NULL,1<<DOWN,&sVal[4]};
@@ -299,13 +322,14 @@ void main(void) {
 	mNewAdd=(stMenuItem){&mNewStep,addStep,mSetVal,NULL,1<<DOWN, "ADD"};
 	mSetVal1=(stMenuItem){&mNewStepT, NULL, decval, incval, (1<<LEFT)|(1<<RIGHT), NULL};
   mShowStep=(stMenuItem){&mNewStep, delStep, NULL, NULL, 1<<DOWN, sStep};
+	mMemFree=(stMenuItem){NULL,goMemFree1,&mRoot,NULL,1<<DOWN,"MemFree"};
+	mMemFree1=(stMenuItem){&mMemFree,NULL,NULL,NULL,0,sMemFree};
 
 	stMenuItem *p = &mRoot;
 
 	status=1; startstop(&mSS);
 
 	//keyboard setup
-	unsigned char kbd, kbd0, but;
 	PORTB=0xf0; // enable pullups
 	kbd=0; kbd0=1; but=UP;
 
