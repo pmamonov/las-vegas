@@ -73,7 +73,8 @@ stMenuItem *goShowStep(stMenuItem *p){
   uint8_t l=0, n=*(uint8_t*)(p->text-1), i=0;
   stStep* s=&step0;
   while (i<n && s->next) {s=s->next; i++;}
-  snprintf(sStep,sizeof(sStep),"DEL? %d:%d",i, s->duration); 
+  snprintf(sStep,sizeof(sStep),"DEL? %hd:%ld-%02ld:%02ld:%02ld",\
+    i, s->duration/86400UL, s->duration%86400UL/3600UL, s->duration%3600/60, s->duration%60); 
   for (i=0; i<NPWM; i++){
     l=strlen(sStep);
     snprintf(&sStep[l],sizeof(sStep)-l," %d",s->pwm_val[i]);
@@ -129,8 +130,8 @@ stMenuItem *incStMin(stMenuItem *p){	newStep.duration+=60; updStTs(); return p;}
 stMenuItem *decStMin(stMenuItem *p){	newStep.duration-=60; updStTs(); return p;}
 stMenuItem *incStHour(stMenuItem *p){	newStep.duration+=3600; updStTs(); return p;}
 stMenuItem *decStHour(stMenuItem *p){	newStep.duration-=3600; updStTs(); return p;}
-stMenuItem *incStDay(stMenuItem *p){	newStep.duration+=86400; updStTs(); return p;}
-stMenuItem *decStDay(stMenuItem *p){	newStep.duration-=86400; updStTs(); return p;}
+stMenuItem *incStDay(stMenuItem *p){	newStep.duration+=86400UL; updStTs(); return p;}
+stMenuItem *decStDay(stMenuItem *p){	newStep.duration-=86400UL; updStTs(); return p;}
 
 stMenuItem *incsec(stMenuItem *p){	time++; return p;}
 stMenuItem *decsec(stMenuItem *p){	time--;return p;}
@@ -138,8 +139,8 @@ stMenuItem *incmin(stMenuItem *p){	time+=60;return p;}
 stMenuItem *decmin(stMenuItem *p){	time-=60;return p;}
 stMenuItem *inchour(stMenuItem *p){	time+=3600;return p;}
 stMenuItem *dechour(stMenuItem *p){	time-=3600;return p;}
-stMenuItem *incday(stMenuItem *p){	time+=86400;return p;}
-stMenuItem *decday(stMenuItem *p){	time-=86400;return p;}
+stMenuItem *incday(stMenuItem *p){	time+=86400UL;return p;}
+stMenuItem *decday(stMenuItem *p){	time-=86400UL;return p;}
 stMenuItem *incmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon<12?d.mon+1:d.mon; date2stamp(&d, &time);return p;}
 stMenuItem *decmon(stMenuItem *p){struct tm d; stamp2date(time, &d); d.mon=d.mon>1?d.mon-1:d.mon; date2stamp(&d, &time);return p;}
 stMenuItem *incyear(stMenuItem *p){struct tm d; stamp2date(time, &d); d.year+=1; date2stamp(&d, &time);return p;}
