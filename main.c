@@ -47,7 +47,7 @@ volatile uint16_t timer[NTIMERS];
 
 ISR(TIMER1_OVF_vect){
 	static int i;
-	TCNT1=53536; // overflow in 1 ms
+	TCNT1=63536; // overflow in 1 ms
 	for (i=0; i<NTIMERS; i++)	if (timer[i]) timer[i]--;
 //timer 0 is for time
 	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_TIM;}
@@ -55,12 +55,12 @@ ISR(TIMER1_OVF_vect){
 
 volatile uint8_t pwm_cnt;
 unsigned char pwm_val[NPWM];
-uint8_t *pwm_port[NPWM]={&PORTD, &PORTD, &PORTD, &PORTD};
-uint8_t *pwm_ddr[NPWM]={&DDRD,&DDRD,&DDRD,&DDRD};
-uint8_t pwm_bit[NPWM]={0, 1, 3, 5};
+uint8_t *pwm_port[NPWM]={&PORTB, &PORTB, &PORTB, &PORTB};
+uint8_t *pwm_ddr[NPWM]={&DDRB,&DDRB,&DDRB,&DDRB};
+uint8_t pwm_bit[NPWM]={5, 4, 3, 2};
 
 ISR(TIMER0_OVF_vect){
-	TCNT0=156;
+	TCNT0 = 256 - 78;
 	static unsigned char i;
 	pwm_cnt++;
 	for (i=0; i<NPWM; i++){
@@ -101,13 +101,13 @@ stMenuItem *startstop(stMenuItem *p){
 		start=time;
 		curstep=0;
 		for (i=0; i<NPWM; i++) pwm_val[i] = 0;
-		TIMSK|=1<<TOIE0;
+		TIMSK0|=1<<TOIE0;
 		snprintf(p->text, 6, "%s", "STOP");
 	}
 	else{
 		snprintf(p->text, 6, "%s", "START");
     snprintf(sStatus, sizeof(sStatus), "STOPPED");
-		TIMSK &= ~(1<<TOIE0);
+		TIMSK0 &= ~(1<<TOIE0);
 		for (i=0; i<NPWM; i++) *pwm_port[i] &= ~(1<<pwm_bit[i]);
 	}
 	return p;
@@ -331,16 +331,16 @@ void main(void) {
 	status=1; startstop(&mSS);
 
 	//keyboard setup
-	PORTB=0xf0; // enable pullups
-	kbd=0; kbd0=1; but=UP;
+	PORTC=0xf; // enable pullups
+	kbd=0; kbd0=0; but=UP;
 
 	//timer
-	TCCR1B|=1<<CS10;//clk
-	TIMSK|=1<<TOIE1;
+	TCCR1B|=2<<CS10;//clk/8
+	TIMSK1|=1<<TOIE1;
 	TCNT1 = 0xffff;
 
 	//  software pwm
-	TCCR0|=1<<CS00;
+	TCCR0B|=2<<CS00;
 //	TIMSK|=1<<TOIE0;
 	for (i=0; i<NPWM; i++){
 		*pwm_ddr[i] |= 1<<pwm_bit[i];
@@ -351,15 +351,17 @@ void main(void) {
 
 	sei();
 
+	status|=1<<UPD_SCRN;
+
   while (1){
-		kbd=PINB&0xf0;
+		kbd=PINC&0xf;
 		if ((kbd^kbd0) && !timer[1]){
   		timer[1]=100;
 			if (~kbd&(kbd^kbd0)){
-			if (~kbd&0x10) but=LEFT;
-			if (~kbd&0x20) but=UP;
-			if (~kbd&0x80) but=RIGHT;
-			if (~kbd&0x40) but=DOWN;
+			if (~kbd&8) but=LEFT;
+			if (~kbd&4) but=UP;
+			if (~kbd&1) but=RIGHT;
+			if (~kbd&2) but=DOWN;
 			p=processButton(p, but);
 			status|=1<<UPD_SCRN;
 			}

@@ -1,9 +1,9 @@
-DEVICE  = atmega32
-F_CPU   = 12000000 #2457600	# in Hz
+DEVICE  = atmega328p
+F_CPU   = 16000000 #2457600	# in Hz
 
 CC = avr-gcc
 CFLAGS = -Wall -Os -mmcu=$(DEVICE) -DF_CPU=$(F_CPU) -I.\
- -DLCD_PORT_NAME=A -DLCD_NCHARS=16
+ -DLCD_PORT_NAME=D -DLCD_NCHARS=16
 
 OBJ=main.o menu.o lcd.o time.o
 
