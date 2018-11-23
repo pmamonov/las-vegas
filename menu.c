@@ -1,7 +1,7 @@
 #include "menu.h"
 
 stMenuItem* processButton(stMenuItem* itm, unsigned char but){
-	void *p;
+	void *p = 0;
 	switch (but){
 		case UP: p=itm->up; break;
 		case DOWN: p=itm->down; break;
