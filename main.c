@@ -9,6 +9,8 @@
 
 #define NPWM 4
 
+#define AUTOREPEAT_MS	200
+
 extern uint8_t __stack;
 
 typedef struct _stStep{
@@ -353,21 +355,32 @@ int main(void) {
 
 	status|=1<<UPD_SCRN;
 
-  while (1){
-		kbd=PINC&0xf;
-		if ((kbd^kbd0) && !timer[1]){
-  		timer[1]=100;
-			if (~kbd&(kbd^kbd0)){
-			if (~kbd&8) but=LEFT;
-			if (~kbd&4) but=UP;
-			if (~kbd&1) but=RIGHT;
-			if (~kbd&2) but=DOWN;
-			p=processButton(p, but);
-			status|=1<<UPD_SCRN;
+	while (1) {
+		kbd = 0xf & ~PINC;
+
+		if ((kbd ^ kbd0) && !timer[1]) {
+			timer[1] = 100;
+
+			if (kbd & (kbd^kbd0)) {
+				if (kbd & 8) but = LEFT;
+				if (kbd & 4) but = UP;
+				if (kbd & 1) but = RIGHT;
+				if (kbd & 2) but = DOWN;
+
+				p = processButton(p, but);
+
+				status |= 1 << UPD_SCRN;
+				timer[2] = 1000;
 			}
 		}
-		kbd0=kbd;
+		kbd0 = kbd;
 		
+		if (kbd && !timer[2]) {
+			timer[2] = AUTOREPEAT_MS;
+			p = processButton(p, but);
+			status |= 1 << UPD_SCRN;
+		}
+
 		if (status & (1<<UPD_TIM)){
 			status &= ~(1<<UPD_TIM);
 			if (p==&mRoot || p==&mSetTime || p->up==&mSetTime || ((stMenuItem*)p->up)->up==&mSetTime) status |= 1<<UPD_SCRN;
