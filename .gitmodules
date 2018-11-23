@@ -1,0 +1,3 @@
+[submodule "pcb"]
+	path = pcb
+	url = https://github.com/kuzmin-ilya/las-vegas
