@@ -47,7 +47,7 @@ volatile uint16_t timer[NTIMERS];
 
 ISR(TIMER1_OVF_vect){
 	static int i;
-	TCNT1=63536; // overflow in 1 ms
+	TCNT1 = (0x10000 - F_CPU / 1000); // overflow in 1 ms
 	for (i=0; i<NTIMERS; i++)	if (timer[i]) timer[i]--;
 //timer 0 is for time
 	if (!timer[0]) {timer[0]=1000; time++; status|=1<<UPD_TIM;}
@@ -60,7 +60,7 @@ uint8_t *pwm_ddr[NPWM]={&DDRB,&DDRB,&DDRB,&DDRB};
 uint8_t pwm_bit[NPWM]={5, 4, 3, 2};
 
 ISR(TIMER0_OVF_vect){
-	TCNT0 = 256 - 78;
+	TCNT0 = 0x100 - (F_CPU / 8 / 256 / 100); // PWM @ 100 Hz
 	static unsigned char i;
 	pwm_cnt++;
 	for (i=0; i<NPWM; i++){
@@ -335,7 +335,7 @@ void main(void) {
 	kbd=0; kbd0=0; but=UP;
 
 	//timer
-	TCCR1B|=2<<CS10;//clk/8
+	TCCR1B|=1<<CS10;
 	TIMSK1|=1<<TOIE1;
 	TCNT1 = 0xffff;
 
