@@ -1,11 +1,13 @@
+#include <stdint.h>
+
 typedef unsigned long int time_t;
 
 struct tm {
-  char sec;
-  char min;
-  char hour;
-  char day;
-  char mon;
+  uint8_t sec;
+  uint8_t min;
+  uint8_t hour;
+  uint8_t day;
+  uint8_t mon;
   int  year;
 };
 

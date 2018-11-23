@@ -35,7 +35,6 @@ void stamp2date(time_t epoch, struct tm *date){
 void date2stamp(struct tm *date, volatile time_t *epoch){
   time_t stamp;
   unsigned int i;
-  unsigned int leap;
   if (date->year < 2000) date->year = 2000;
   if (date->mon < 1) date->mon = 1;
   if (date->mon > 12) date->mon = 12;
@@ -48,7 +47,6 @@ void date2stamp(struct tm *date, volatile time_t *epoch){
   stamp = 0;
   for (i=2000; i < date->year; i++)
     stamp += 86400L*(365 + calc_leap(i));
-  leap = calc_leap(i);
   for (i=0; i < (date->mon-1); i++)
     stamp += 86400L*((i==1) ? DpM[i] + calc_leap(date->year) : DpM[i]); 
   if (date->day < 1) date->day = 1;
