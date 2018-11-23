@@ -27,7 +27,7 @@ char sMemFree[8];
 uint16_t *pmem;
 
 // menu declaration
-volatile stMenuItem mRoot, mSS, mSetProg, mSetTime,\
+stMenuItem mRoot, mSS, mSetProg, mSetTime,\
 		mSetYear, mSetMonth, mSetDay, mSetHour, mSetMin, mSetSec,\
 		mSetYear1,mSetMonth1,mSetDay1,mSetHour1,mSetMin1, mSetSec1,\
 		mNewStep, mNewStepT, mNewAdd, mSetVal1, mShowStep, 
@@ -55,8 +55,8 @@ ISR(TIMER1_OVF_vect){
 
 volatile uint8_t pwm_cnt;
 unsigned char pwm_val[NPWM];
-uint8_t *pwm_port[NPWM]={&PORTB, &PORTB, &PORTB, &PORTB};
-uint8_t *pwm_ddr[NPWM]={&DDRB,&DDRB,&DDRB,&DDRB};
+volatile uint8_t *pwm_port[NPWM]={&PORTB, &PORTB, &PORTB, &PORTB};
+volatile uint8_t *pwm_ddr[NPWM]={&DDRB,&DDRB,&DDRB,&DDRB};
 uint8_t pwm_bit[NPWM]={5, 4, 3, 2};
 
 ISR(TIMER0_OVF_vect){
@@ -118,10 +118,10 @@ char sStepDay[5], sStepHour[5], sStepMin[5], sStepSec[5];
 void updStTs(void){
 //	struct tm d;
 //	stamp2date(newStep.duration, &d);
-	snprintf(sStepDay, sizeof(sStepDay), "d:%02d",newStep.duration/86400UL);
-	snprintf(sStepHour, sizeof(sStepDay), "h:%02d",newStep.duration%86400UL/3600);
-	snprintf(sStepMin, sizeof(sStepDay), "m:%02d",newStep.duration%3600/60);
-	snprintf(sStepSec, sizeof(sStepDay), "s:%02d",newStep.duration%60);
+	snprintf(sStepDay, sizeof(sStepDay), "d:%02ld",newStep.duration/86400UL);
+	snprintf(sStepHour, sizeof(sStepDay), "h:%02ld",newStep.duration%86400UL/3600);
+	snprintf(sStepMin, sizeof(sStepDay), "m:%02ld",newStep.duration%3600/60);
+	snprintf(sStepSec, sizeof(sStepDay), "s:%02ld",newStep.duration%60);
 }
 
 stMenuItem *incStSec(stMenuItem *p){	newStep.duration++;  updStTs(); return p;}
@@ -237,7 +237,7 @@ void prevch(void){
 	snprintf(sBanner, 33, "%x: %c", x, (char)x--);
 }*/
 
-void main(void) {
+int main(void) {
 	int i;
 
 	char sDisp[33]; // display buffer
