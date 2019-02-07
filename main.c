@@ -353,7 +353,7 @@ int main(void) {
 
 	sei();
 
-	status|=1<<UPD_SCRN;
+	status |= 1 << UPD_SCRN;
 
 	while (1) {
 		kbd = 0xf & ~PINC;
@@ -361,7 +361,7 @@ int main(void) {
 		if ((kbd ^ kbd0) && !timer[1]) {
 			timer[1] = 100;
 
-			if (kbd & (kbd^kbd0)) {
+			if (kbd & (kbd ^ kbd0)) {
 				if (kbd & 8) but = LEFT;
 				if (kbd & 4) but = UP;
 				if (kbd & 1) but = RIGHT;
@@ -374,40 +374,50 @@ int main(void) {
 			}
 		}
 		kbd0 = kbd;
-		
+
 		if (kbd && !timer[2]) {
 			timer[2] = AUTOREPEAT_MS;
 			p = processButton(p, but);
 			status |= 1 << UPD_SCRN;
 		}
 
-		if (status & (1<<UPD_TIM)){
-			status &= ~(1<<UPD_TIM);
-			if (p==&mRoot || p==&mSetTime || p->up==&mSetTime || ((stMenuItem*)p->up)->up==&mSetTime) status |= 1<<UPD_SCRN;
-      if (status&(1<<RUN)){
-			s=&step0;
-			t=start;
-			i=0;
-			while (i<curstep && s->next) {
-				s=s->next;
-				t+=s->duration;
-				i++;
+		if (status & (1 << UPD_TIM)) {
+			status &= ~(1 << UPD_TIM);
+
+			if (p == &mRoot || p == &mSetTime ||
+			    p->up == &mSetTime ||
+			    ((stMenuItem*)p->up)->up == &mSetTime)
+				status |= 1 << UPD_SCRN;
+
+			if (status & (1 << RUN)) {
+				s = &step0;
+				t = start;
+				i = 0;
+				while (i < curstep && s->next) {
+					s=s->next;
+					t+=s->duration;
+					i++;
+				}
+				if (time >= t) {
+					if (s->next) {
+						s=s->next; curstep++;
+					} else {
+						start = t;
+						s = step0.next ? step0.next : &step0;
+						curstep = step0.next ? 1 : 0;
+					}
+
+					for (i = 0; i < NPWM; i++)
+						pwm_val[i] = s->pwm_val[i];
+
+					snprintf(sStatus, sizeof(sStatus),
+						 "RUNNING(%02d)", curstep);
+				}
 			}
-			if (time>=t){
-				if (s->next) {s=s->next; curstep++;}
-				else {
-          start=t;
-          s=step0.next ? step0.next : &step0; 
-          curstep=step0.next?1:0;
-        }
-				for (i=0; i<NPWM; i++) pwm_val[i]=s->pwm_val[i];
-        snprintf(sStatus, sizeof(sStatus), "RUNNING(%02d)", curstep);
-			}
-      }
 		}
 
-		if (status & (1<<UPD_SCRN)){
-			status &= ~(1<<UPD_SCRN);
+		if (status & (1 << UPD_SCRN)) {
+			status &= ~(1 << UPD_SCRN);
 			//update banner
 			stamp2date(time, &date);
 			snprintf(sSec, 5, "s:%02d", date.sec);
@@ -416,12 +426,12 @@ int main(void) {
 			snprintf(sDay, 5, "D:%02d", date.day);
 			snprintf(sMonth, 5, "M:%02d", date.mon);
 			snprintf(sYear, 7, "Y:%4d", date.year);
-			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s\n%s",\
-				&sDay[2], &sMonth[2], &sYear[4], &sHour[2], &sMin[2], sStatus);
+			snprintf(sBanner, 33, "%2s.%2s.%2s %2s:%2s\n%s",
+				 &sDay[2], &sMonth[2], &sYear[4],
+				 &sHour[2], &sMin[2], sStatus);
 			print_menu(sDisp, p);
 			lcd_Clear();
-	  	lcd_Print(sDisp);
+			lcd_Print(sDisp);
 		}
-
 	}
 }
